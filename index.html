@@ -1,17 +1,90 @@
-
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <title>Modello 3D in realtà aumentata</title>
+    <title>Tokonoma AR</title>
 
-    <!-- A-Frame -->
     <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
-
-    <!-- MindAR -->
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+
+    <script>
+    AFRAME.registerComponent('freeze-follow', {
+        schema: {
+            target: {type: 'selector'},
+            offset: {type: 'vec3', default: {x: 0, y: 0, z: 0.1}},
+            rotation: {type: 'vec3', default: {x: 0, y: 0, z: 0}},
+            scale: {type: 'vec3', default: {x: 0.2, y: 0.2, z: 0.2}}
+        },
+
+        init: function () {
+            this.tracking = false;
+
+            this.position = new THREE.Vector3();
+            this.quaternion = new THREE.Quaternion();
+            this.worldScale = new THREE.Vector3();
+            this.offsetRotation = new THREE.Quaternion();
+            this.offsetPosition = new THREE.Vector3();
+
+            this.localRotation = new THREE.Euler(
+                THREE.MathUtils.degToRad(this.data.rotation.x),
+                THREE.MathUtils.degToRad(this.data.rotation.y),
+                THREE.MathUtils.degToRad(this.data.rotation.z)
+            );
+
+            this.localQuaternion = new THREE.Quaternion()
+                .setFromEuler(this.localRotation);
+
+            this.targetEl = this.data.target;
+
+            this.targetEl.addEventListener('targetFound', () => {
+                this.tracking = true;
+                this.el.setAttribute('visible', true);
+            });
+
+            this.targetEl.addEventListener('targetLost', () => {
+                this.tracking = false;
+                // Il modello rimane visibile nella sua ultima posizione
+            });
+
+            this.el.setAttribute('visible', false);
+        },
+
+        tick: function () {
+            if (!this.tracking) return;
+
+            const targetObject = this.targetEl.object3D;
+            targetObject.updateMatrixWorld(true);
+
+            targetObject.getWorldPosition(this.position);
+            targetObject.getWorldQuaternion(this.quaternion);
+            targetObject.getWorldScale(this.worldScale);
+
+            this.offsetPosition.set(
+                this.data.offset.x,
+                this.data.offset.y,
+                this.data.offset.z
+            );
+
+            this.offsetPosition.applyQuaternion(this.quaternion);
+
+            this.el.object3D.position.copy(this.position)
+                .add(this.offsetPosition);
+
+            this.offsetRotation.copy(this.quaternion)
+                .multiply(this.localQuaternion);
+
+            this.el.object3D.quaternion.copy(this.offsetRotation);
+
+            this.el.object3D.scale.set(
+                this.data.scale.x * this.worldScale.x,
+                this.data.scale.y * this.worldScale.y,
+                this.data.scale.z * this.worldScale.z
+            );
+        }
+    });
+    </script>
 
     <style>
         body {
@@ -23,41 +96,42 @@
 
 <body>
 
-    <a-scene
-        mindar-image="imageTargetSrc: ./targets.mind;"
-        color-space="sRGB"
-        renderer="colorManagement: true, physicallyCorrectLights"
-        vr-mode-ui="enabled: false"
-        device-orientation-permission-ui="enabled: false">
+<a-scene
+    mindar-image="imageTargetSrc: ./targets.mind;"
+    color-space="sRGB"
+    renderer="colorManagement: true, physicallyCorrectLights"
+    vr-mode-ui="enabled: false"
+    device-orientation-permission-ui="enabled: false">
 
-        <!-- Caricamento modello 3D -->
-        <a-assets>
-            <a-asset-item
-                id="modello3D"
-                src="./modello.glb">
-            </a-asset-item>
-        </a-assets>
+    <a-assets>
+        <a-asset-item
+            id="modello3D"
+            src="./modello.glb">
+        </a-asset-item>
+    </a-assets>
 
-        <!-- Telecamera -->
-        <a-camera
-            position="0 0 0"
-            look-controls="enabled: false">
-        </a-camera>
+    <a-camera
+        position="0 0 0"
+        look-controls="enabled: false">
+    </a-camera>
 
-        <!-- Riconoscimento immagine -->
-        <a-entity mindar-image-target="targetIndex: 0">
+    <!-- TARGET DI RIFERIMENTO -->
+    <a-entity
+        id="target"
+        mindar-image-target="targetIndex: 0">
+    </a-entity>
 
-            <!-- Modello 3D -->
-            <a-gltf-model
-                src="#modello3D"
-                position="0 0 0.1"
-                rotation="0 0 0"
-                scale="0.2 0.2 0.2">
-            </a-gltf-model>
+    <!-- MODELLO 3D INDIPENDENTE DAL TARGET -->
+    <a-gltf-model
+        src="#modello3D"
+        freeze-follow="
+            target: #target;
+            offset: 0 0 0.1;
+            rotation: 0 0 0;
+            scale: 0.2 0.2 0.2">
+    </a-gltf-model>
 
-        </a-entity>
-
-    </a-scene>
+</a-scene>
 
 </body>
 </html>
